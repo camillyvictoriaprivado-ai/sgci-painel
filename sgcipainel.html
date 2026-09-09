@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Controle — Rede FO RJ/ES</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root{
+  --bg: #0c1520;
+  --bg-panel: #121e2c;
+  --bg-panel-raised: #16273a;
+  --line: #223349;
+  --line-soft: #1a2a3c;
+  --text: #e7edf3;
+  --text-dim: #93a5b8;
+  --text-faint: #5c728a;
+  --cyan: #2dd4bf;
+  --cyan-dim: #1a3d3a;
+  --amber: #f2a341;
+  --amber-dim: #3a2d17;
+  --coral: #e8694f;
+}
+
+*{box-sizing:border-box; margin:0; padding:0;}
+
+body{
+  background: var(--bg);
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 48px 48px;
+  color: var(--text);
+  font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+  line-height: 1.5;
+  padding: 0 0 80px 0;
+}
+
+.wrap{
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* ---------- header ---------- */
+header{
+  padding: 44px 0 32px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.brand{ display:flex; align-items:center; gap:14px; }
+.brand .dot{
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 0 4px var(--cyan-dim);
+}
+h1{
+  font-family:'Space Grotesk', sans-serif;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.brand-sub{ color: var(--text-dim); font-size: 13.5px; margin-top: 3px; }
+.meta{ text-align:right; font-size: 13px; color: var(--text-faint); font-family:'IBM Plex Mono', monospace; }
+.meta div + div{ margin-top: 4px; }
+.meta b{ color: var(--text-dim); font-weight:500; }
+
+/* ---------- hero ---------- */
+.hero{
+  display:grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin: 32px 0 8px 0;
+}
+.hero .cell{ background: var(--bg-panel); padding: 26px 24px; }
+.hero .cell.main{ background: var(--bg-panel-raised); }
+.hero-label{ font-size: 12px; color: var(--text-faint); text-transform: none; letter-spacing: 0.01em; }
+.hero-value{
+  font-family:'Space Grotesk', sans-serif;
+  font-size: 34px;
+  font-weight: 600;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.hero .cell.main .hero-value{ color: var(--cyan); font-size: 40px; }
+.hero-note{ font-size: 12.5px; color: var(--text-dim); margin-top: 8px; }
+
+.filter-bar{
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  margin-top: 22px;
+  padding: 18px 20px;
+}
+.filter-bar .filters{
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.filter-field{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+}
+.filter-field label{
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.filter-field input,
+.filter-field select,
+.filter-bar button{
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-raised);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 14px;
+}
+.filter-bar button{
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--cyan), #3db6d1);
+  color: #06131e;
+  font-weight: 700;
+  border: none;
+  min-width: 150px;
+}
+.filter-bar button:hover{ filter: brightness(1.05); }
+
+/* ---------- sections ---------- */
+section{ margin-top: 56px; }
+.section-head{
+  display:flex; align-items:baseline; gap: 12px;
+  margin-bottom: 22px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
+}
+.section-num{ font-family:'IBM Plex Mono', monospace; font-size: 13px; color: var(--text-faint); }
+.section-head h2{ font-family:'Space Grotesk', sans-serif; font-size: 19px; font-weight: 600; }
+.section-head p{ color: var(--text-dim); font-size: 13.5px; margin-left: auto; }
+
+.grid2{ display:grid; grid-template-columns: 1.6fr 1fr; gap: 20px; }
+.grid3{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+
+.panel{
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  padding: 22px 22px 18px 22px;
+}
+.panel h3{
+  font-size: 13.5px; font-weight: 600; color: var(--text-dim);
+  margin-bottom: 18px; display:flex; justify-content:space-between; align-items:center;
+}
+.panel h3 span.tag{
+  font-family:'IBM Plex Mono', monospace; font-size: 11px; font-weight:400;
+  color: var(--text-faint); border:1px solid var(--line); padding: 2px 8px;
+}
+.chart-box{ position: relative; height: 240px; }
+.chart-box.tall{ height: 300px; }
+
+/* stat rows for state/group breakdown */
+.stat-rows{ display:flex; flex-direction:column; gap: 14px; }
+.stat-row .top{ display:flex; justify-content:space-between; font-size: 13.5px; margin-bottom: 6px; }
+.stat-row .top b{ font-weight:500; color: var(--text); }
+.stat-row .top .val{ font-family:'IBM Plex Mono', monospace; color: var(--text-dim); }
+.bar-track{ height: 6px; background: var(--line-soft); overflow:hidden; }
+.bar-fill{ height: 100%; background: var(--cyan); }
+.bar-fill.amber{ background: var(--amber); }
+
+/* cross callout */
+.callout{
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+  padding: 18px 22px;
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+}
+.callout b{ color: var(--text); font-weight: 600; }
+
+.legend-row{ display:flex; gap:18px; margin-top:14px; flex-wrap:wrap; }
+.legend-item{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-dim); }
+.legend-swatch{ width:10px; height:10px; border-radius:2px; }
+
+footer{
+  margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--text-faint); font-family:'IBM Plex Mono', monospace;
+  display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;
+}
+
+@media (max-width: 860px){
+  .grid2, .grid3{ grid-template-columns: 1fr; }
+  .hero{ grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="brand">
+        <div class="dot"></div>
+        <h1>Painel de Controle — Rede FO RJ/ES</h1>
+      </div>
+      <div class="brand-sub">Cruzamento SGCI (medições/pagamento) × SIGITM (chamados de falha) — Contrato TELE PERFORMANCE, Lote 4</div>
+    </div>
+    <div class="meta">
+      <div><b>SGCI:</b> mar/24 – ago/26 · 38.306 medições</div>
+      <div><b>SIGITM:</b> jan/26 – 08/set/26 · 24.258 chamados</div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="cell main">
+      <div class="hero-label">Valor total pago (SGCI, período completo)</div>
+      <div class="hero-value" id="kpi-valor">—</div>
+      <div class="hero-note">38.306 medições autorizadas para pagamento</div>
+    </div>
+    <div class="cell">
+      <div class="hero-label">Chamados de falha (SIGITM)</div>
+      <div class="hero-value" id="kpi-chamados">—</div>
+      <div class="hero-note" id="kpi-chamados-note">—</div>
+    </div>
+    <div class="cell">
+      <div class="hero-label">MTTR médio</div>
+      <div class="hero-value" id="kpi-mttr">—</div>
+      <div class="hero-note">tempo entre abertura e baixa do chamado</div>
+    </div>
+    <div class="cell">
+      <div class="hero-label">Chamados com OR faturável</div>
+      <div class="hero-value" id="kpi-pct-or">—</div>
+      <div class="hero-note" id="kpi-pct-or-note">—</div>
+    </div>
+    <div class="cell">
+      <div class="hero-label">TAs com OR / medição criada</div>
+      <div class="hero-value" id="kpi-com-or-count">—</div>
+      <div class="hero-note" id="kpi-com-or-note">—</div>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="filters">
+      <div class="filter-field">
+        <label for="filtroDataInicio">Data inicial</label>
+        <input id="filtroDataInicio" type="month">
+      </div>
+      <div class="filter-field">
+        <label for="filtroDataFim">Data final</label>
+        <input id="filtroDataFim" type="month">
+      </div>
+      <div class="filter-field">
+        <label for="filtroEstado">Estado</label>
+        <select id="filtroEstado">
+          <option value="todos">Todos</option>
+          <option value="RJ">RJ</option>
+          <option value="ES">ES</option>
+        </select>
+      </div>
+      <button id="btnAplicarFiltro" type="button">Aplicar filtros</button>
+    </div>
+  </div>
+
+  <!-- ============ FINANCEIRO ============ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <h2>Financeiro — SGCI</h2>
+      <p>Valor a pagar por medição, mar/2024 a ago/2026</p>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h3>Valor pago por mês <span class="tag">R$</span></h3>
+        <div class="chart-box tall"><canvas id="chartValorMes"></canvas></div>
+      </div>
+      <div class="panel">
+        <h3>Distribuição por escritório</h3>
+        <div class="stat-rows" id="rowsEstadoValor"></div>
+        <h3 style="margin-top:26px;">Distribuição por grupo de serviço</h3>
+        <div class="stat-rows" id="rowsGrupoValor"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OPERACIONAL ============ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <h2>Operacional — SIGITM</h2>
+      <p>Chamados de falha, jan/2026 a 08/set/2026</p>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h3>Chamados por mês, por estado</h3>
+        <div class="chart-box tall"><canvas id="chartChamadosMes"></canvas></div>
+        <div class="legend-row">
+          <div class="legend-item"><span class="legend-swatch" style="background:var(--cyan)"></span>RJ</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:var(--amber)"></span>ES</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Status dos chamados</h3>
+        <div class="chart-box"><canvas id="chartStatus"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:20px;">
+      <div class="panel">
+        <h3>Principais tipos de falha</h3>
+        <div class="chart-box tall"><canvas id="chartFalhas"></canvas></div>
+      </div>
+      <div class="panel">
+        <h3>MTTR médio por mês <span class="tag">horas</span></h3>
+        <div class="chart-box tall"><canvas id="chartMttr"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CRUZAMENTO ============ -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <h2>Cruzamento SGCI × SIGITM</h2>
+      <p>Ligação via número de OR / Medição citado no chamado</p>
+    </div>
+
+    <div class="callout">
+      Dos <b>24.258</b> chamados de falha, apenas <b id="cross-com-or">—</b> (<b id="cross-pct">—</b>) referenciam um número de OR/Medição do SGCI — somando <b id="cross-valor">—</b> em pagamentos. O restante do valor pago (<b id="cross-resto">—</b>) corresponde a medições sem chamado de falha associado — provavelmente manutenção programada/preventiva, não reativa.
+    </div>
+
+    <div class="panel">
+      <h3>Valor pago vs. volume de chamados — 2026 (janela em comum)</h3>
+      <div class="chart-box tall"><canvas id="chartCruzado"></canvas></div>
+    </div>
+  </section>
+
+  <footer>
+    <div>Fonte: SGCI_SIGITM_BASE_COMPLETA.xlsx</div>
+    <div>Gerado a partir de 62.564 registros (38.306 medições + 24.258 chamados)</div>
+  </footer>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ---- Conexão Supabase ----
+const SUPABASE_URL = 'https://znhkazwgjncyyssrjswl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_VZ3d5lwEW13KOOjyfZwaZg_VG7PW09Q';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+async function loadData(){
+  const [
+    kpisRes, cruzRes, valorMesRes, valorVsChamadosRes, valorEstadoRes,
+    chamadosMesEstadoRes, statusRes, topFalhasRes, mttrRes, valorGrupoRes
+  ] = await Promise.all([
+    supabaseClient.from('v_kpis').select('*').single(),
+    supabaseClient.from('v_cruzamento').select('*').single(),
+    supabaseClient.from('v_valor_por_mes').select('*').order('mes'),
+    supabaseClient.from('v_valor_vs_chamados_mes').select('*').order('mes'),
+    supabaseClient.from('v_valor_por_estado').select('*'),
+    supabaseClient.from('v_chamados_por_mes_estado').select('*').order('mes'),
+    supabaseClient.from('v_status_chamados').select('*'),
+    supabaseClient.from('v_top_falhas').select('*').order('qtd', { ascending: false }).limit(8),
+    supabaseClient.from('v_mttr_por_mes').select('*').order('mes'),
+    supabaseClient.from('v_valor_por_grupo').select('*').order('valor', { ascending: false })
+  ]);
+
+  for (const r of [kpisRes, cruzRes, valorMesRes, valorVsChamadosRes, valorEstadoRes,
+                    chamadosMesEstadoRes, statusRes, topFalhasRes, mttrRes, valorGrupoRes]) {
+    if (r.error) throw r.error;
+  }
+
+  const kpisRow = kpisRes.data;
+  const cruz = cruzRes.data;
+  const mttrRows = mttrRes.data || [];
+  const mttrMedio = mttrRows.length
+    ? mttrRows.reduce((s, r) => s + Number(r.mttr_horas), 0) / mttrRows.length
+    : 0;
+  const pctFaturados = cruz.total_chamados ? (cruz.chamados_com_or / cruz.total_chamados * 100) : 0;
+
+  const tickets_por_mes_estado = {};
+  (chamadosMesEstadoRes.data || []).forEach(r => {
+    if (!tickets_por_mes_estado[r.mes]) tickets_por_mes_estado[r.mes] = {};
+    tickets_por_mes_estado[r.mes][r.estado] = r.qtd;
+  });
+
+  const status_count = {};
+  (statusRes.data || []).forEach(r => { status_count[r.status] = r.qtd; });
+
+  const mttr_por_mes = {};
+  mttrRows.forEach(r => { mttr_por_mes[r.mes] = Number(r.mttr_horas); });
+
+  const valor_por_estado = {};
+  const qtd_medicoes_por_estado = {};
+  (valorEstadoRes.data || []).forEach(r => {
+    valor_por_estado[r.estado] = r.valor;
+    qtd_medicoes_por_estado[r.estado] = r.qtd_medicoes;
+  });
+
+  const valor_por_grupo = {};
+  (valorGrupoRes.data || []).forEach(r => { valor_por_grupo[r.grupo] = r.valor; });
+
+  const vsChamados2026 = (valorVsChamadosRes.data || []).filter(r => r.mes && r.mes.startsWith('2026'));
+
+  return {
+    kpis: {
+      valor_total: kpisRow.valor_total,
+      total_medicoes: kpisRow.total_medicoes,
+      total_chamados: kpisRow.total_chamados,
+      chamados_fechados: kpisRow.chamados_fechados,
+      chamados_ativos: kpisRow.chamados_ativos,
+      mttr_medio_h: Math.round(mttrMedio * 10) / 10,
+      chamados_com_or: cruz.chamados_com_or,
+      chamados_sem_or: cruz.total_chamados - cruz.chamados_com_or,
+      valor_vinculado_chamados: cruz.valor_vinculado,
+      pct_chamados_faturados: Math.round(pctFaturados * 10) / 10
+    },
+    valor_por_mes_full: {
+      labels: (valorMesRes.data || []).map(r => r.mes),
+      valores: (valorMesRes.data || []).map(r => r.valor)
+    },
+    valor_vs_chamados_2026: {
+      labels: vsChamados2026.map(r => r.mes),
+      valor: vsChamados2026.map(r => r.valor),
+      chamados: vsChamados2026.map(r => r.chamados)
+    },
+    valor_por_estado,
+    tickets_por_mes_estado,
+    status_count,
+    top_falhas: (topFalhasRes.data || []).map(r => [r.tipo_de_falha, r.qtd]),
+    mttr_por_mes,
+    qtd_medicoes_por_estado,
+    valor_por_grupo
+  };
+}
+
+function whenMonthInRange(month, start, end) {
+  if (!start && !end) return true;
+  if (start && month < start) return false;
+  if (end && month > end) return false;
+  return true;
+}
+
+function buildFilteredData(baseData, filters = {}) {
+  const selectedState = filters.estado || 'todos';
+  const start = filters.dataInicio || '';
+  const end = filters.dataFim || '';
+
+  const valorMesRows = (baseData.valor_por_mes_full.labels || []).map((label, index) => ({
+    label,
+    valor: Number(baseData.valor_por_mes_full.valores[index] || 0)
+  })).filter(row => whenMonthInRange(row.label, start, end));
+
+  const filteredValorMesFull = {
+    labels: valorMesRows.map(row => row.label),
+    valores: valorMesRows.map(row => row.valor)
+  };
+
+  const valorVsChamadosRows = (baseData.valor_vs_chamados_2026.labels || []).map((label, index) => ({
+    label,
+    valor: Number(baseData.valor_vs_chamados_2026.valor[index] || 0),
+    chamados: Number(baseData.valor_vs_chamados_2026.chamados[index] || 0)
+  })).filter(row => whenMonthInRange(row.label, start, end));
+
+  const filteredValorVsChamados = {
+    labels: valorVsChamadosRows.map(row => row.label),
+    valor: valorVsChamadosRows.map(row => row.valor),
+    chamados: valorVsChamadosRows.map(row => row.chamados)
+  };
+
+  const monthsInRange = Array.from(new Set([
+    ...filteredValorMesFull.labels,
+    ...filteredValorVsChamados.labels,
+    ...Object.keys(baseData.tickets_por_mes_estado || {}).filter(month => whenMonthInRange(month, start, end)),
+    ...Object.keys(baseData.mttr_por_mes || {}).filter(month => whenMonthInRange(month, start, end))
+  ])).sort();
+
+  const filteredTicketsPorMesEstado = {};
+  monthsInRange.forEach(month => {
+    const baseMonth = baseData.tickets_por_mes_estado[month] || {};
+    if (!baseMonth || Object.keys(baseMonth).length === 0) return;
+
+    if (selectedState === 'todos') {
+      filteredTicketsPorMesEstado[month] = { ...baseMonth };
+    } else if (baseMonth[selectedState] !== undefined) {
+      filteredTicketsPorMesEstado[month] = { [selectedState]: baseMonth[selectedState] };
+    }
+  });
+
+  const filteredMttrPorMes = {};
+  Object.keys(baseData.mttr_por_mes || {}).forEach(month => {
+    if (whenMonthInRange(month, start, end)) {
+      filteredMttrPorMes[month] = Number(baseData.mttr_por_mes[month] || 0);
+    }
+  });
+
+  const filteredValorPorEstado = selectedState === 'todos'
+    ? { ...baseData.valor_por_estado }
+    : (baseData.valor_por_estado[selectedState] !== undefined
+      ? { [selectedState]: baseData.valor_por_estado[selectedState] }
+      : {});
+
+  const filteredQtdMedicoesPorEstado = selectedState === 'todos'
+    ? { ...baseData.qtd_medicoes_por_estado }
+    : (baseData.qtd_medicoes_por_estado[selectedState] !== undefined
+      ? { [selectedState]: baseData.qtd_medicoes_por_estado[selectedState] }
+      : {});
+
+  const filteredValorTotal = selectedState === 'todos'
+    ? filteredValorMesRows.reduce((sum, row) => sum + row.valor, 0)
+    : Number(baseData.valor_por_estado[selectedState] || 0);
+
+  const filteredTotalChamados = monthsInRange.reduce((sum, month) => {
+    const row = filteredTicketsPorMesEstado[month] || {};
+    if (selectedState === 'todos') {
+      return sum + Object.values(row).reduce((inner, val) => inner + Number(val || 0), 0);
+    }
+    return sum + Number(row[selectedState] || 0);
+  }, 0);
+
+  const filteredTotalMedicoes = selectedState === 'todos'
+    ? Number(baseData.kpis.total_medicoes || 0)
+    : Number(baseData.qtd_medicoes_por_estado[selectedState] || 0);
+
+  const filteredChamadosComOr = filteredTotalChamados
+    ? Math.round(filteredTotalChamados * (Number(baseData.kpis.chamados_com_or || 0) / Number(baseData.kpis.total_chamados || 1)))
+    : 0;
+
+  const filteredValorVinculado = filteredValorTotal
+    ? Math.round(filteredValorTotal * (Number(baseData.kpis.valor_vinculado_chamados || 0) / Number(baseData.kpis.valor_total || 1)))
+    : 0;
+
+  const filteredPctFaturados = filteredTotalChamados
+    ? (filteredChamadosComOr / filteredTotalChamados) * 100
+    : 0;
+
+  const filteredMttr = Object.values(filteredMttrPorMes).length
+    ? Object.values(filteredMttrPorMes).reduce((sum, value) => sum + Number(value || 0), 0) / Object.values(filteredMttrPorMes).length
+    : 0;
+
+  return {
+    ...baseData,
+    kpis: {
+      ...baseData.kpis,
+      valor_total: filteredValorTotal,
+      total_medicoes: filteredTotalMedicoes,
+      total_chamados: filteredTotalChamados,
+      chamados_com_or: filteredChamadosComOr,
+      chamados_sem_or: filteredTotalChamados - filteredChamadosComOr,
+      valor_vinculado_chamados: filteredValorVinculado,
+      pct_chamados_faturados: filteredPctFaturados,
+      mttr_medio_h: filteredMttr
+    },
+    valor_por_mes_full: filteredValorMesFull,
+    valor_vs_chamados_2026: filteredValorVsChamados,
+    tickets_por_mes_estado: filteredTicketsPorMesEstado,
+    mttr_por_mes: filteredMttrPorMes,
+    valor_por_estado: filteredValorPorEstado,
+    qtd_medicoes_por_estado: filteredQtdMedicoesPorEstado
+  };
+}
+
+function renderDashboard(DATA) {
+const fmtBRL = (v, compact=true) => {
+  if(compact){
+    if(Math.abs(v) >= 1e6) return 'R$ ' + (v/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' mi';
+    if(Math.abs(v) >= 1e3) return 'R$ ' + (v/1e3).toLocaleString('pt-BR',{maximumFractionDigits:0}) + ' mil';
+  }
+  return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+};
+const fmtNum = (v) => v.toLocaleString('pt-BR');
+
+['chartValorMes', 'chartChamadosMes', 'chartStatus', 'chartFalhas', 'chartMttr', 'chartCruzado']
+  .forEach(chartId => {
+    const existingChart = Chart.getChart(chartId);
+    if (existingChart) existingChart.destroy();
+  });
+
+// ---- KPIs ----
+document.getElementById('kpi-valor').textContent = fmtBRL(DATA.kpis.valor_total);
+document.getElementById('kpi-chamados').textContent = fmtNum(DATA.kpis.total_chamados);
+document.getElementById('kpi-chamados-note').textContent = `${fmtNum(DATA.kpis.chamados_fechados)} fechados · ${fmtNum(DATA.kpis.chamados_ativos)} em aberto`;
+document.getElementById('kpi-mttr').textContent = DATA.kpis.mttr_medio_h.toLocaleString('pt-BR') + 'h';
+document.getElementById('kpi-pct-or').textContent = DATA.kpis.pct_chamados_faturados.toLocaleString('pt-BR') + '%';
+document.getElementById('kpi-pct-or-note').textContent = `${fmtNum(DATA.kpis.chamados_com_or)} de ${fmtNum(DATA.kpis.total_chamados)} chamados`;
+document.getElementById('kpi-com-or-count').textContent = fmtNum(DATA.kpis.chamados_com_or);
+document.getElementById('kpi-com-or-note').textContent = 'TAs com número de OR / medição criado';
+
+// ---- cross callout ----
+document.getElementById('cross-com-or').textContent = fmtNum(DATA.kpis.chamados_com_or);
+document.getElementById('cross-pct').textContent = DATA.kpis.pct_chamados_faturados.toLocaleString('pt-BR') + '%';
+document.getElementById('cross-valor').textContent = fmtBRL(DATA.kpis.valor_vinculado_chamados);
+document.getElementById('cross-resto').textContent = fmtBRL(DATA.kpis.valor_total - DATA.kpis.valor_vinculado_chamados);
+
+// ---- shared chart defaults ----
+Chart.defaults.color = '#93a5b8';
+Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+Chart.defaults.font.size = 11.5;
+const gridColor = '#1a2a3c';
+const CYAN = '#2dd4bf', AMBER = '#f2a341', CORAL = '#e8694f', SLATE = '#3d5570';
+
+function monthLabel(m){
+  const [y,mo] = m.split('-');
+  const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  return meses[parseInt(mo,10)-1] + '/' + y.slice(2);
+}
+
+// 1. Valor por mês (linha)
+new Chart(document.getElementById('chartValorMes'), {
+  type: 'line',
+  data: {
+    labels: DATA.valor_por_mes_full.labels.map(monthLabel),
+    datasets: [{
+      data: DATA.valor_por_mes_full.valores,
+      borderColor: CYAN, backgroundColor: 'rgba(45,212,191,0.08)',
+      fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2
+    }]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false},
+      tooltip:{ callbacks:{ label: (ctx)=> fmtBRL(ctx.raw, false) } } },
+    scales:{
+      x:{ grid:{display:false}, ticks:{ maxRotation:0, autoSkip:true, maxTicksLimit:10 } },
+      y:{ grid:{color:gridColor}, ticks:{ callback:(v)=>fmtBRL(v) } }
+    }
+  }
+});
+
+// 2. Chamados por mês por estado (stacked bar)
+const meses26 = Object.keys(DATA.tickets_por_mes_estado);
+const chamasMesDatasets = [
+  { label:'RJ', data: meses26.map(m=>DATA.tickets_por_mes_estado[m]['RJ']||0), backgroundColor: CYAN, borderRadius:2 },
+  { label:'ES', data: meses26.map(m=>DATA.tickets_por_mes_estado[m]['ES']||0), backgroundColor: AMBER, borderRadius:2 }
+].filter(ds => ds.data.some(v => v > 0));
+
+new Chart(document.getElementById('chartChamadosMes'), {
+  type: 'bar',
+  data: {
+    labels: meses26.map(monthLabel),
+    datasets: chamasMesDatasets
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{
+      x:{ stacked:true, grid:{display:false} },
+      y:{ stacked:true, grid:{color:gridColor} }
+    }
+  }
+});
+
+// 3. Status donut
+const statusLabels = Object.keys(DATA.status_count);
+new Chart(document.getElementById('chartStatus'), {
+  type: 'doughnut',
+  data: {
+    labels: statusLabels,
+    datasets: [{
+      data: statusLabels.map(s=>DATA.status_count[s]),
+      backgroundColor: [CYAN, AMBER, CORAL],
+      borderColor: '#121e2c', borderWidth: 3
+    }]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false, cutout:'68%',
+    plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, padding:16 } } }
+  }
+});
+
+// 4. Top falhas (horizontal bar)
+new Chart(document.getElementById('chartFalhas'), {
+  type: 'bar',
+  data: {
+    labels: DATA.top_falhas.map(f=>f[0]),
+    datasets: [{ data: DATA.top_falhas.map(f=>f[1]), backgroundColor: SLATE, borderRadius:2, barThickness:16 }]
+  },
+  options: {
+    indexAxis: 'y', responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{ x:{ grid:{color:gridColor} }, y:{ grid:{display:false}, ticks:{ font:{size:10.5} } } }
+  }
+});
+
+// 5. MTTR por mês
+const mttrMonths = Object.keys(DATA.mttr_por_mes);
+new Chart(document.getElementById('chartMttr'), {
+  type: 'line',
+  data: {
+    labels: mttrMonths.map(monthLabel),
+    datasets: [{
+      data: mttrMonths.map(m=>DATA.mttr_por_mes[m]),
+      borderColor: AMBER, backgroundColor:'rgba(242,163,65,0.08)',
+      fill:true, tension:0.25, pointRadius:3, pointBackgroundColor: AMBER, borderWidth:2
+    }]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=> ctx.raw + 'h' } } },
+    scales:{ x:{ grid:{display:false} }, y:{ grid:{color:gridColor}, ticks:{ callback:(v)=>v+'h' } } }
+  }
+});
+
+// 6. Cruzado — valor vs chamados 2026 (dual axis)
+new Chart(document.getElementById('chartCruzado'), {
+  data: {
+    labels: DATA.valor_vs_chamados_2026.labels.map(monthLabel),
+    datasets: [
+      {
+        type:'bar', label:'Valor pago (R$)', data: DATA.valor_vs_chamados_2026.valor,
+        backgroundColor:'rgba(45,212,191,0.55)', borderRadius:2, yAxisID:'y'
+      },
+      {
+        type:'line', label:'Chamados', data: DATA.valor_vs_chamados_2026.chamados,
+        borderColor: AMBER, backgroundColor: AMBER, tension:0.25, pointRadius:3, borderWidth:2, yAxisID:'y1'
+      }
+    ]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, padding:16 } },
+      tooltip:{ callbacks:{ label:(ctx)=> ctx.dataset.label==='Chamados' ? ctx.raw+' chamados' : fmtBRL(ctx.raw,false) } } },
+    scales:{
+      x:{ grid:{display:false} },
+      y:{ position:'left', grid:{color:gridColor}, ticks:{ callback:(v)=>fmtBRL(v) } },
+      y1:{ position:'right', grid:{display:false}, ticks:{ callback:(v)=>v } }
+    }
+  }
+});
+
+// ---- stat-row bars: valor por estado ----
+const rowsEstado = document.getElementById('rowsEstadoValor');
+rowsEstado.innerHTML = '';
+const estadoEntries = Object.entries(DATA.valor_por_estado).sort((a,b)=>b[1]-a[1]);
+const maxEstado = Math.max(...estadoEntries.map(e=>e[1]));
+estadoEntries.forEach(([k,v])=>{
+  const pct = (v/DATA.kpis.valor_total*100).toFixed(1);
+  rowsEstado.innerHTML += `
+    <div class="stat-row">
+      <div class="top"><b>${k}</b><span class="val">${fmtBRL(v)} · ${pct}%</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(v/maxEstado*100)}%"></div></div>
+    </div>`;
+});
+
+// ---- stat-row bars: valor por grupo ----
+const rowsGrupo = document.getElementById('rowsGrupoValor');
+rowsGrupo.innerHTML = '';
+const grupoEntries = Object.entries(DATA.valor_por_grupo);
+const maxGrupo = Math.max(...grupoEntries.map(e=>e[1]));
+grupoEntries.forEach(([k,v], i)=>{
+  const pct = (v/DATA.kpis.valor_total*100).toFixed(1);
+  rowsGrupo.innerHTML += `
+    <div class="stat-row">
+      <div class="top"><b>${k}</b><span class="val">${pct}%</span></div>
+      <div class="bar-track"><div class="bar-fill ${i===0?'':'amber'}" style="width:${Math.max((v/maxGrupo*100),1.5)}%"></div></div>
+    </div>`;
+});
+}
+
+function setupFilters(baseData) {
+  const dataInicioInput = document.getElementById('filtroDataInicio');
+  const dataFimInput = document.getElementById('filtroDataFim');
+  const estadoSelect = document.getElementById('filtroEstado');
+  const applyButton = document.getElementById('btnAplicarFiltro');
+
+  const monthKeys = Array.from(new Set([
+    ...(baseData.valor_por_mes_full.labels || []),
+    ...(baseData.valor_vs_chamados_2026.labels || []),
+    ...Object.keys(baseData.tickets_por_mes_estado || {}),
+    ...Object.keys(baseData.mttr_por_mes || {})
+  ])).sort();
+
+  if (monthKeys.length) {
+    dataInicioInput.min = monthKeys[0];
+    dataInicioInput.max = monthKeys[monthKeys.length - 1];
+    dataFimInput.min = monthKeys[0];
+    dataFimInput.max = monthKeys[monthKeys.length - 1];
+  }
+
+  const applyFilters = () => {
+    const filters = {
+      dataInicio: dataInicioInput.value || '',
+      dataFim: dataFimInput.value || '',
+      estado: estadoSelect.value || 'todos'
+    };
+
+    if (filters.dataInicio && filters.dataFim && filters.dataInicio > filters.dataFim) {
+      const temp = filters.dataInicio;
+      filters.dataInicio = filters.dataFim;
+      filters.dataFim = temp;
+      dataInicioInput.value = filters.dataInicio;
+      dataFimInput.value = filters.dataFim;
+    }
+
+    renderDashboard(buildFilteredData(baseData, filters));
+  };
+
+  applyButton.addEventListener('click', applyFilters);
+  dataInicioInput.addEventListener('change', applyFilters);
+  dataFimInput.addEventListener('change', applyFilters);
+  estadoSelect.addEventListener('change', applyFilters);
+}
+
+loadData()
+  .then((data) => {
+    BASE_DATA = data;
+    setupFilters(data);
+    renderDashboard(data);
+  })
+  .catch(err => {
+    console.error('Erro ao carregar dados do Supabase:', err);
+    document.querySelector('.wrap').insertAdjacentHTML('afterbegin',
+      '<div style="background:#3a2d17;border:1px solid #f2a341;color:#f2a341;padding:16px;margin-bottom:20px;font-family:\'IBM Plex Mono\',monospace;font-size:13px;">Erro ao carregar dados do Supabase: ' +
+      (err && err.message ? err.message : String(err)) + '</div>');
+  });
+</script>
+</body>
+</html>
