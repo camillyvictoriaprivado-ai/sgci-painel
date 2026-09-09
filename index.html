@@ -342,6 +342,11 @@ footer{
       <h3>Valor pago vs. volume de chamados — 2026 (janela em comum)</h3>
       <div class="chart-box tall"><canvas id="chartCruzado"></canvas></div>
     </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <h3>Quantidade de TAs/chamados vs. OR abertas — 2026 (janela em comum)</h3>
+      <div class="chart-box tall"><canvas id="chartOrVsChamados"></canvas></div>
+    </div>
   </section>
 
   <footer>
@@ -357,6 +362,29 @@ footer{
 const SUPABASE_URL = 'https://znhkazwgjncyyssrjswl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_VZ3d5lwEW13KOOjyfZwaZg_VG7PW09Q';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+async function fetchAllSgciServicos() {
+  const pageSize = 1000;
+  let from = 0;
+  let allRows = [];
+
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from('sgci_servicos')
+      .select('servico_numero, centro_telefonico, medicao_data_da_criacao')
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    allRows = allRows.concat(data);
+
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return allRows;
+}
 
 async function loadData(){
   const [
@@ -374,6 +402,8 @@ async function loadData(){
     supabaseClient.from('v_mttr_por_mes').select('*').order('mes'),
     supabaseClient.from('v_valor_por_grupo').select('*').order('valor', { ascending: false })
   ]);
+
+  const sgciServicosRows = await fetchAllSgciServicos();
 
   for (const r of [kpisRes, cruzRes, valorMesRes, valorVsChamadosRes, valorEstadoRes,
                     chamadosMesEstadoRes, statusRes, topFalhasRes, mttrRes, valorGrupoRes]) {
@@ -412,6 +442,46 @@ async function loadData(){
 
   const vsChamados2026 = (valorVsChamadosRes.data || []).filter(r => r.mes && r.mes.startsWith('2026'));
 
+  const monthFromDate = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString().slice(0, 7);
+  };
+
+  const orKeysPorMes = {};
+  const orKeysPorMesEstado = { RJ: {}, ES: {} };
+
+  sgciServicosRows.forEach(r => {
+    const month = monthFromDate(r.medicao_data_da_criacao);
+    const servicoNumero = String(r.servico_numero ?? '').trim();
+    if (!month || !servicoNumero) return;
+
+    if (!orKeysPorMes[month]) orKeysPorMes[month] = new Set();
+    orKeysPorMes[month].add(servicoNumero);
+
+    const estado = String(r.centro_telefonico || '').trim().toUpperCase();
+    if (estado === 'RJ' || estado === 'ES') {
+      if (!orKeysPorMesEstado[estado][month]) orKeysPorMesEstado[estado][month] = new Set();
+      orKeysPorMesEstado[estado][month].add(servicoNumero);
+    }
+  });
+
+  const orAbertasPorMes = {};
+  Object.entries(orKeysPorMes).forEach(([month, set]) => {
+    orAbertasPorMes[month] = set.size;
+  });
+
+  const orAbertasLabels = vsChamados2026.map(r => r.mes);
+
+  const orAbertasPorMesEstado = {};
+  Object.entries(orKeysPorMesEstado).forEach(([estado, months]) => {
+    orAbertasPorMesEstado[estado] = {};
+    Object.entries(months).forEach(([month, set]) => {
+      orAbertasPorMesEstado[estado][month] = set.size;
+    });
+  });
+
   return {
     kpis: {
       valor_total: kpisRow.valor_total,
@@ -434,13 +504,20 @@ async function loadData(){
       valor: vsChamados2026.map(r => r.valor),
       chamados: vsChamados2026.map(r => r.chamados)
     },
+    or_abertas_vs_chamados: {
+      labels: orAbertasLabels,
+      or_abertas: orAbertasLabels.map(month => Number(orAbertasPorMes[month] || 0)),
+      chamados: orAbertasLabels.map(month => Number((valorVsChamadosRes.data || []).find(r => r.mes === month)?.chamados || 0))
+    },
     valor_por_estado,
     tickets_por_mes_estado,
     status_count,
     top_falhas: (topFalhasRes.data || []).map(r => [r.tipo_de_falha, r.qtd]),
     mttr_por_mes,
     qtd_medicoes_por_estado,
-    valor_por_grupo
+    valor_por_grupo,
+    or_abertas_por_mes: orAbertasPorMes,
+    or_abertas_por_mes_estado: orAbertasPorMesEstado
   };
 }
 
@@ -476,6 +553,22 @@ function buildFilteredData(baseData, filters = {}) {
     labels: valorVsChamadosRows.map(row => row.label),
     valor: valorVsChamadosRows.map(row => row.valor),
     chamados: valorVsChamadosRows.map(row => row.chamados)
+  };
+
+  const orLabels = baseData.or_abertas_vs_chamados?.labels || baseData.valor_vs_chamados_2026?.labels || [];
+
+  const filteredOrAbertasRows = orLabels.map((label, index) => ({
+    label,
+    or_abertas: Number((selectedState === 'todos'
+      ? (baseData.or_abertas_por_mes?.[label] ?? 0)
+      : (baseData.or_abertas_por_mes_estado?.[selectedState]?.[label] ?? 0)) || 0),
+    chamados: Number((baseData.or_abertas_vs_chamados?.chamados[index] ?? baseData.valor_vs_chamados_2026?.chamados[index] ?? 0) || 0)
+  })).filter(row => whenMonthInRange(row.label, start, end));
+
+  const filteredOrAbertasVsChamados = {
+    labels: filteredOrAbertasRows.map(row => row.label),
+    or_abertas: filteredOrAbertasRows.map(row => row.or_abertas),
+    chamados: filteredOrAbertasRows.map(row => row.chamados)
   };
 
   const monthsInRange = Array.from(new Set([
@@ -563,6 +656,7 @@ function buildFilteredData(baseData, filters = {}) {
     },
     valor_por_mes_full: filteredValorMesFull,
     valor_vs_chamados_2026: filteredValorVsChamados,
+    or_abertas_vs_chamados: filteredOrAbertasVsChamados,
     tickets_por_mes_estado: filteredTicketsPorMesEstado,
     mttr_por_mes: filteredMttrPorMes,
     valor_por_estado: filteredValorPorEstado,
@@ -580,7 +674,7 @@ const fmtBRL = (v, compact=true) => {
 };
 const fmtNum = (v) => v.toLocaleString('pt-BR');
 
-['chartValorMes', 'chartChamadosMes', 'chartStatus', 'chartFalhas', 'chartMttr', 'chartCruzado']
+['chartValorMes', 'chartChamadosMes', 'chartStatus', 'chartFalhas', 'chartMttr', 'chartCruzado', 'chartOrVsChamados']
   .forEach(chartId => {
     const existingChart = Chart.getChart(chartId);
     if (existingChart) existingChart.destroy();
@@ -734,6 +828,35 @@ new Chart(document.getElementById('chartCruzado'), {
       x:{ grid:{display:false} },
       y:{ position:'left', grid:{color:gridColor}, ticks:{ callback:(v)=>fmtBRL(v) } },
       y1:{ position:'right', grid:{display:false}, ticks:{ callback:(v)=>v } }
+    }
+  }
+});
+
+// 7. OR abertas vs. TAs/chamados (dual axis)
+new Chart(document.getElementById('chartOrVsChamados'), {
+  data: {
+    labels: DATA.or_abertas_vs_chamados.labels.map(monthLabel),
+    datasets: [
+      {
+        type:'line', label:'OR abertas', data: DATA.or_abertas_vs_chamados.or_abertas,
+        borderColor: CYAN, backgroundColor: 'rgba(45,212,191,0.12)', fill: false,
+        tension:0.25, pointRadius:3, pointBackgroundColor: CYAN, borderWidth:2, yAxisID:'y'
+      },
+      {
+        type:'line', label:'TAs / chamados', data: DATA.or_abertas_vs_chamados.chamados,
+        borderColor: AMBER, backgroundColor: 'rgba(242,163,65,0.08)', fill: false,
+        tension:0.25, pointRadius:3, pointBackgroundColor: AMBER, borderWidth:2, yAxisID:'y1'
+      }
+    ]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, padding:16 } },
+      tooltip:{ callbacks:{ label:(ctx)=> ctx.dataset.label==='TAs / chamados' ? ctx.raw+' chamados' : ctx.raw+' ORs' } } },
+    scales:{
+      x:{ grid:{display:false} },
+      y:{ position:'left', grid:{color:gridColor}, ticks:{ callback:(v)=>fmtNum(v) } },
+      y1:{ position:'right', grid:{display:false}, ticks:{ callback:(v)=>fmtNum(v) } }
     }
   }
 });
