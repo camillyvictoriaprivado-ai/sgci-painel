@@ -440,6 +440,17 @@ async function loadData(){
   const valor_por_grupo = {};
   (valorGrupoRes.data || []).forEach(r => { valor_por_grupo[r.grupo] = r.valor; });
 
+  const valor_por_grupo_por_estado = {};
+  (sgciServicosRows || []).forEach(r => {
+    const estado = String(r.centro_telefonico || '').trim().toUpperCase();
+    const grupo = String(r.medicao_grupo_nome || '').trim();
+    const valor = Number(r.medicao_valor_a_pagar || 0);
+
+    if (!estado || !grupo || !valor) return;
+    if (!valor_por_grupo_por_estado[estado]) valor_por_grupo_por_estado[estado] = {};
+    valor_por_grupo_por_estado[estado][grupo] = (valor_por_grupo_por_estado[estado][grupo] || 0) + valor;
+  });
+
   const vsChamados2026 = (valorVsChamadosRes.data || []).filter(r => r.mes && r.mes.startsWith('2026'));
 
   const monthFromDate = (value) => {
@@ -516,6 +527,7 @@ async function loadData(){
     mttr_por_mes,
     qtd_medicoes_por_estado,
     valor_por_grupo,
+    valor_por_grupo_por_estado,
     or_abertas_por_mes: orAbertasPorMes,
     or_abertas_por_mes_estado: orAbertasPorMesEstado
   };
@@ -611,8 +623,20 @@ function buildFilteredData(baseData, filters = {}) {
       ? { [selectedState]: baseData.qtd_medicoes_por_estado[selectedState] }
       : {});
 
+  const filteredValorPorGrupo = selectedState === 'todos'
+    ? { ...baseData.valor_por_grupo }
+    : { ...(baseData.valor_por_grupo_por_estado?.[selectedState] || {}) };
+
+  const filteredStatusCount = selectedState === 'todos'
+    ? { ...baseData.status_count }
+    : {};
+
+  const filteredTopFalhas = selectedState === 'todos'
+    ? [...(baseData.top_falhas || [])]
+    : [];
+
   const filteredValorTotal = selectedState === 'todos'
-    ? filteredValorMesRows.reduce((sum, row) => sum + row.valor, 0)
+    ? valorMesRows.reduce((sum, row) => sum + row.valor, 0)
     : Number(baseData.valor_por_estado[selectedState] || 0);
 
   const filteredTotalChamados = monthsInRange.reduce((sum, month) => {
@@ -662,7 +686,10 @@ function buildFilteredData(baseData, filters = {}) {
     tickets_por_mes_estado: filteredTicketsPorMesEstado,
     mttr_por_mes: filteredMttrPorMes,
     valor_por_estado: filteredValorPorEstado,
-    qtd_medicoes_por_estado: filteredQtdMedicoesPorEstado
+    qtd_medicoes_por_estado: filteredQtdMedicoesPorEstado,
+    valor_por_grupo: filteredValorPorGrupo,
+    status_count: filteredStatusCount,
+    top_falhas: filteredTopFalhas
   };
 }
 
