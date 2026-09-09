@@ -562,7 +562,9 @@ function buildFilteredData(baseData, filters = {}) {
     or_abertas: Number((selectedState === 'todos'
       ? (baseData.or_abertas_por_mes?.[label] ?? 0)
       : (baseData.or_abertas_por_mes_estado?.[selectedState]?.[label] ?? 0)) || 0),
-    chamados: Number((baseData.or_abertas_vs_chamados?.chamados[index] ?? baseData.valor_vs_chamados_2026?.chamados[index] ?? 0) || 0)
+    chamados: Number((selectedState === 'todos'
+      ? (baseData.or_abertas_vs_chamados?.chamados[index] ?? baseData.valor_vs_chamados_2026?.chamados[index] ?? 0)
+      : (baseData.tickets_por_mes_estado?.[label]?.[selectedState] ?? 0)) || 0)
   })).filter(row => whenMonthInRange(row.label, start, end));
 
   const filteredOrAbertasVsChamados = {
@@ -929,9 +931,11 @@ function setupFilters(baseData) {
   };
 
   applyButton.addEventListener('click', applyFilters);
-  dataInicioInput.addEventListener('change', applyFilters);
-  dataFimInput.addEventListener('change', applyFilters);
-  estadoSelect.addEventListener('change', applyFilters);
+
+  [dataInicioInput, dataFimInput, estadoSelect].forEach(el => {
+    el.addEventListener('input', applyFilters);
+    el.addEventListener('change', applyFilters);
+  });
 }
 
 loadData()
