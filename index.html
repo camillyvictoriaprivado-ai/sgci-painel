@@ -231,9 +231,9 @@ footer{
       <div class="hero-note" id="kpi-chamados-note">—</div>
     </div>
     <div class="cell">
-      <div class="hero-label">MTTR médio</div>
-      <div class="hero-value" id="kpi-mttr">—</div>
-      <div class="hero-note">tempo entre abertura e baixa do chamado</div>
+      <div class="hero-label">Mês com mais chamados sem OR criada</div>
+      <div class="hero-value" id="kpi-maior-mes-sem-or">—</div>
+      <div class="hero-note" id="kpi-maior-mes-sem-or-note">—</div>
     </div>
     <div class="cell">
       <div class="hero-label">Chamados com OR faturável</div>
@@ -424,6 +424,82 @@ const hasTaRaizValue = (value) => {
   return true;
 };
 
+const parseSigitmDate = (value) => {
+  if (value === null || value === undefined) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const patterns = [
+    /^([0-9]{2})\/([0-9]{2})\/([0-9]{2})\s+([0-9]{2}):([0-9]{2})$/,
+    /^([0-9]{2})\/([0-9]{2})\/([0-9]{4})\s+([0-9]{2}):([0-9]{2})$/,
+    /^([0-9]{4})-([0-9]{2})-([0-9]{2})[T\s]([0-9]{2}):([0-9]{2})/
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+
+    if (pattern === patterns[0]) {
+      const [, day, month, yearShort, hour, minute] = match;
+      const year = 2000 + Number(yearShort);
+      return new Date(year, Number(month) - 1, Number(day), Number(hour), Number(minute));
+    }
+
+    if (pattern === patterns[1]) {
+      const [, day, month, year, hour, minute] = match;
+      return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+    }
+
+    const [, year, month, day, hour, minute] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+  }
+
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const buildMttrStats = (rows = []) => {
+  const durations = [];
+  const amountsByMonth = {};
+
+  rows.forEach(row => {
+    const start = parseSigitmDate(row.data_criacao);
+    const end = parseSigitmDate(
+      row.data_baixa ||
+      row.data_fechamento ||
+      row.data_baixa_chamado ||
+      row.data_fechamento_chamado ||
+      row.data_finalizacao ||
+      row.data_baixa_defeito
+    );
+
+    if (!start || !end || end < start) return;
+
+    const hours = (end.getTime() - start.getTime()) / 3600000;
+    if (!Number.isFinite(hours) || hours < 0) return;
+
+    durations.push(hours);
+
+    const month = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
+    if (!amountsByMonth[month]) amountsByMonth[month] = { total: 0, count: 0 };
+
+    amountsByMonth[month].total += hours;
+    amountsByMonth[month].count += 1;
+  });
+
+  const mttrPorMes = {};
+  Object.entries(amountsByMonth).forEach(([month, stats]) => {
+    mttrPorMes[month] = stats.total / stats.count;
+  });
+
+  const mttrMedio = durations.length
+    ? durations.reduce((sum, value) => sum + value, 0) / durations.length
+    : 0;
+
+  return { mttrMedio, mttrPorMes };
+};
+
 async function fetchAllSgciServicos() {
   const pageSize = 1000;
   let from = 0;
@@ -455,7 +531,7 @@ async function fetchAllSigitmChamados() {
   while (true) {
     const { data, error } = await supabaseClient
       .from('sigitm_chamados')
-      .select('*')
+      .select('data_criacao, possui_ta_raiz, raiz, baixa_defeito, sigla_estado')
       .range(from, from + pageSize - 1);
 
     if (error) throw error;
@@ -541,9 +617,10 @@ async function loadData(){
   const kpisRow = kpisRes.data;
   const cruz = cruzRes.data;
   const mttrRows = mttrRes.data || [];
-  const mttrMedio = mttrRows.length
+  const mttrStats = buildMttrStats(sigitmRows);
+  const mttrMedio = mttrStats.mttrMedio || (mttrRows.length
     ? mttrRows.reduce((s, r) => s + Number(r.mttr_horas), 0) / mttrRows.length
-    : 0;
+    : 0);
   const pctFaturados = cruz.total_chamados ? (cruz.chamados_com_or / cruz.total_chamados * 100) : 0;
 
   const tickets_por_mes_estado = {};
@@ -555,8 +632,13 @@ async function loadData(){
   const status_count = {};
   (statusRes.data || []).forEach(r => { status_count[r.status] = r.qtd; });
 
-  const mttr_por_mes = {};
-  mttrRows.forEach(r => { mttr_por_mes[r.mes] = Number(r.mttr_horas); });
+  const mttr_por_mes = Object.keys(mttrStats.mttrPorMes).length
+    ? mttrStats.mttrPorMes
+    : (() => {
+        const out = {};
+        mttrRows.forEach(r => { out[r.mes] = Number(r.mttr_horas); });
+        return out;
+      })();
 
   const valor_por_estado = {};
   const qtd_medicoes_por_estado = {};
@@ -613,6 +695,22 @@ async function loadData(){
 
   const orAbertasLabels = vsChamados2026.map(r => r.mes);
 
+  const maiorMesSemOrBase = (() => {
+    let best = null;
+
+    orAbertasLabels.forEach(month => {
+      const chamados = Number((valorVsChamadosRes.data || []).find(r => r.mes === month)?.chamados || 0);
+      const orAbertas = Number(orAbertasPorMes[month] || 0);
+      const semOr = Math.max(0, chamados - orAbertas);
+
+      if (best === null || semOr > best.qtd) {
+        best = { mes: month, qtd: semOr };
+      }
+    });
+
+    return best;
+  })();
+
   const orAbertasPorMesEstado = {};
   Object.entries(orKeysPorMesEstado).forEach(([estado, months]) => {
     orAbertasPorMesEstado[estado] = {};
@@ -633,6 +731,7 @@ async function loadData(){
       chamados_sem_or: cruz.total_chamados - cruz.chamados_com_or,
       valor_vinculado_chamados: cruz.valor_vinculado,
       pct_chamados_faturados: Math.round(pctFaturados * 10) / 10,
+      maior_mes_sem_or: maiorMesSemOrBase,
       qtd_ta_com_raiz: sumTaRaizQtd(taRaizPorMesEstadoRows),
       valor_real: kpisRow.valor_total - sumValorDup(taRaizValorDupPorMesEstadoRows)
     },
@@ -734,6 +833,22 @@ function buildFilteredData(baseData, filters = {}) {
     chamados: filteredOrAbertasRows.map(row => row.chamados)
   };
 
+  const maiorMesSemOr = (() => {
+    let best = null;
+
+    filteredOrAbertasRows.forEach(row => {
+      const chamados = Number(row.chamados || 0);
+      const orAbertas = Number(row.or_abertas || 0);
+      const semOr = Math.max(0, chamados - orAbertas);
+
+      if (best === null || semOr > best.qtd) {
+        best = { mes: row.label, qtd: semOr };
+      }
+    });
+
+    return best;
+  })();
+
   const monthsInRange = Array.from(new Set([
     ...filteredValorMesFull.labels,
     ...filteredValorVsChamados.labels,
@@ -815,6 +930,7 @@ function buildFilteredData(baseData, filters = {}) {
   const filteredMttr = Object.values(filteredMttrPorMes).length
     ? Object.values(filteredMttrPorMes).reduce((sum, value) => sum + Number(value || 0), 0) / Object.values(filteredMttrPorMes).length
     : 0;
+  const filteredMttrRounded = Number.isFinite(filteredMttr) ? Math.round(filteredMttr * 10) / 10 : 0;
 
   const rowInFilter = (row) => {
     if (!whenMonthInRange(row.mes, start, end)) return false;
@@ -842,7 +958,8 @@ function buildFilteredData(baseData, filters = {}) {
       chamados_sem_or: filteredTotalChamados - filteredChamadosComOr,
       valor_vinculado_chamados: filteredValorVinculado,
       pct_chamados_faturados: filteredPctFaturados,
-      mttr_medio_h: filteredMttr,
+      mttr_medio_h: filteredMttrRounded,
+      maior_mes_sem_or: maiorMesSemOr,
       qtd_ta_com_raiz: filteredQtdTaComRaiz,
       valor_real: filteredValorReal
     },
@@ -869,6 +986,13 @@ const fmtBRL = (v, compact=true) => {
   return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 };
 const fmtNum = (v) => v.toLocaleString('pt-BR');
+const fmtHours = (v) => {
+  if (!Number.isFinite(v)) return '—';
+  return v.toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }) + 'h';
+};
 
 ['chartValorMes', 'chartChamadosMes', 'chartStatus', 'chartFalhas', 'chartMttr', 'chartCruzado', 'chartOrVsChamados', 'chartBaixaDefeito']
   .forEach(chartId => {
@@ -880,7 +1004,11 @@ const fmtNum = (v) => v.toLocaleString('pt-BR');
 document.getElementById('kpi-valor').textContent = fmtBRL(DATA.kpis.valor_total);
 document.getElementById('kpi-chamados').textContent = fmtNum(DATA.kpis.total_chamados);
 document.getElementById('kpi-chamados-note').textContent = `${fmtNum(DATA.kpis.chamados_fechados)} fechados · ${fmtNum(DATA.kpis.chamados_ativos)} em aberto`;
-document.getElementById('kpi-mttr').textContent = DATA.kpis.mttr_medio_h.toLocaleString('pt-BR') + 'h';
+const maiorMesSemOr = DATA.kpis.maior_mes_sem_or || null;
+document.getElementById('kpi-maior-mes-sem-or').textContent = maiorMesSemOr ? monthLabel(maiorMesSemOr.mes) : '—';
+document.getElementById('kpi-maior-mes-sem-or-note').textContent = maiorMesSemOr
+  ? `${fmtNum(maiorMesSemOr.qtd)} chamados sem OR criada`
+  : '—';
 document.getElementById('kpi-pct-or').textContent = DATA.kpis.pct_chamados_faturados.toLocaleString('pt-BR') + '%';
 document.getElementById('kpi-pct-or-note').textContent = `${fmtNum(DATA.kpis.chamados_com_or)} de ${fmtNum(DATA.kpis.total_chamados)} chamados`;
 document.getElementById('kpi-com-or-count').textContent = fmtNum(DATA.kpis.chamados_com_or);
