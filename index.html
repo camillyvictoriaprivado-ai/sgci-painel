@@ -247,6 +247,19 @@ footer{
     </div>
   </div>
 
+  <div class="hero" style="grid-template-columns: 1fr 1fr; margin-top:8px;">
+    <div class="cell">
+      <div class="hero-label">TAs com TA raiz</div>
+      <div class="hero-value" id="kpi-ta-raiz-count">—</div>
+      <div class="hero-note">não é necessário criar ocorrência para essas TAs</div>
+    </div>
+    <div class="cell main">
+      <div class="hero-label">Valor real (excluindo pagamentos duplicados de TAs com TA raiz)</div>
+      <div class="hero-value" id="kpi-valor-real">—</div>
+      <div class="hero-note" id="kpi-valor-real-note">—</div>
+    </div>
+  </div>
+
   <div class="filter-bar">
     <div class="filters">
       <div class="filter-field">
@@ -324,6 +337,11 @@ footer{
         <div class="chart-box tall"><canvas id="chartMttr"></canvas></div>
       </div>
     </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <h3>Ranking de causas — Baixa Defeito</h3>
+      <div class="chart-box" style="height:520px;"><canvas id="chartBaixaDefeito"></canvas></div>
+    </div>
   </section>
 
   <!-- ============ CRUZAMENTO ============ -->
@@ -363,6 +381,49 @@ const SUPABASE_URL = 'https://znhkazwgjncyyssrjswl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_VZ3d5lwEW13KOOjyfZwaZg_VG7PW09Q';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const normalizeCausa = (value) => String(value || '')
+  .trim()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^A-Z0-9]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toUpperCase();
+
+const ALLOWED_BAIXA_DEFEITO_CAUSAS = new Set([
+  'ABALROAMENTO POR CARGA ALTA',
+  'ABALROAMENTO POR TROCA DE POSTE',
+  'ACIDENTE',
+  'ACOMODACAO EM BANDEJA',
+  'ATAQUE DE FORMIGAS',
+  'ATAQUE DE ROEDORES',
+  'CORTE POR LINHA DE PIPA',
+  'CORTE POR TERCEIROS - OBRAS',
+  'CORTE POR TERCEIROS - TROCA DE POSTES',
+  'DEGRADACAO NO ENLACE OPTICO',
+  'DESCARGA ELETRICA',
+  'FALHA DE MAO DE OBRA',
+  'FALHA DE MAO DE OBRA (IMPLANTACAO)',
+  'FIBRA QUEBRADA NA CEO CTO BEO',
+  'FURTO DE CABO DE FIBRA',
+  'FURTO DE CAIXA DE EMENDA',
+  'INCENDIO',
+  'PIG TAIL CORDAO CENTRAL OU CLIENTE',
+  'PIG TAIL CORDAO CENTRAL CLIENTE',
+  'PODA DE ARVORE',
+  'QUEDA DE ARVORES',
+  'VANDALISMO'
+].map(causa => normalizeCausa(causa)));
+
+const isAllowedBaixaDefeitoCausa = (value) => ALLOWED_BAIXA_DEFEITO_CAUSAS.has(normalizeCausa(value));
+
+const hasTaRaizValue = (value) => {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (!normalized) return false;
+  if (['0', 'FALSE', 'NO', 'NAO', 'NÃO', 'NAO POSSUI TA RAIZ', 'NÃO POSSUI TA RAIZ'].includes(normalized)) return false;
+  return true;
+};
+
 async function fetchAllSgciServicos() {
   const pageSize = 1000;
   let from = 0;
@@ -386,10 +447,34 @@ async function fetchAllSgciServicos() {
   return allRows;
 }
 
+async function fetchAllSigitmChamados() {
+  const pageSize = 1000;
+  let from = 0;
+  let allRows = [];
+
+  while (true) {
+    const { data, error } = await supabaseClient
+      .from('sigitm_chamados')
+      .select('*')
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    allRows = allRows.concat(data);
+
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return allRows;
+}
+
 async function loadData(){
   const [
     kpisRes, cruzRes, valorMesRes, valorVsChamadosRes, valorEstadoRes,
-    chamadosMesEstadoRes, statusRes, topFalhasRes, mttrRes, valorGrupoRes
+    chamadosMesEstadoRes, statusRes, topFalhasRes, mttrRes, valorGrupoRes,
+    taRaizMesEstadoRes, taRaizValorDupMesEstadoRes, baixaDefeitoMesEstadoRes
   ] = await Promise.all([
     supabaseClient.from('v_kpis').select('*').single(),
     supabaseClient.from('v_cruzamento').select('*').single(),
@@ -400,15 +485,58 @@ async function loadData(){
     supabaseClient.from('v_status_chamados').select('*'),
     supabaseClient.from('v_top_falhas').select('*').order('qtd', { ascending: false }).limit(8),
     supabaseClient.from('v_mttr_por_mes').select('*').order('mes'),
-    supabaseClient.from('v_valor_por_grupo').select('*').order('valor', { ascending: false })
+    supabaseClient.from('v_valor_por_grupo').select('*').order('valor', { ascending: false }),
+    supabaseClient.from('v_ta_raiz_por_mes_estado').select('*'),
+    supabaseClient.from('v_ta_raiz_valor_duplicado_por_mes_estado').select('*'),
+    supabaseClient.from('v_baixa_defeito_ranking_por_mes_estado').select('*')
   ]);
 
-  const sgciServicosRows = await fetchAllSgciServicos();
+  const [sgciServicosRows, sigitmRows] = await Promise.all([
+    fetchAllSgciServicos(),
+    fetchAllSigitmChamados()
+  ]);
 
   for (const r of [kpisRes, cruzRes, valorMesRes, valorVsChamadosRes, valorEstadoRes,
-                    chamadosMesEstadoRes, statusRes, topFalhasRes, mttrRes, valorGrupoRes]) {
+                    chamadosMesEstadoRes, statusRes, topFalhasRes, mttrRes, valorGrupoRes,
+                    taRaizMesEstadoRes, taRaizValorDupMesEstadoRes, baixaDefeitoMesEstadoRes]) {
     if (r.error) throw r.error;
   }
+  const taRaizPorMesEstadoRows = (() => {
+    const rawTaRaizByMonthState = {};
+
+    sigitmRows.forEach(row => {
+      const rawDate = String(row.data_criacao || '').trim();
+      const match = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
+      if (!match) return;
+
+      const hasTaRaiz = hasTaRaizValue(row.possui_ta_raiz || row.raiz);
+      if (!hasTaRaiz) return;
+
+      if (!isAllowedBaixaDefeitoCausa(row.baixa_defeito)) return;
+
+      const year = 2000 + Number(match[3]);
+      const month = `${year}-${match[2]}`;
+      const estado = String(row.sigla_estado || '-').trim() || '-';
+
+      if (!rawTaRaizByMonthState[month]) rawTaRaizByMonthState[month] = {};
+      rawTaRaizByMonthState[month][estado] = (rawTaRaizByMonthState[month][estado] || 0) + 1;
+    });
+
+    const aggregated = [];
+    Object.entries(rawTaRaizByMonthState).forEach(([month, estados]) => {
+      Object.entries(estados).forEach(([estado, qtd]) => {
+        aggregated.push({ mes: month, estado, qtd_ta_com_raiz: qtd });
+      });
+    });
+
+    return aggregated.length ? aggregated : (taRaizMesEstadoRes.data || []);
+  })();
+
+  const taRaizValorDupPorMesEstadoRows = taRaizValorDupMesEstadoRes.data || [];
+  const baixaDefeitoPorMesEstadoRows = baixaDefeitoMesEstadoRes.data || [];
+
+  const sumTaRaizQtd = (rows) => rows.reduce((s, r) => s + Number(r.qtd_ta_com_raiz || 0), 0);
+  const sumValorDup = (rows) => rows.reduce((s, r) => s + Number(r.valor_duplicado || 0), 0);
 
   const kpisRow = kpisRes.data;
   const cruz = cruzRes.data;
@@ -504,8 +632,14 @@ async function loadData(){
       chamados_com_or: cruz.chamados_com_or,
       chamados_sem_or: cruz.total_chamados - cruz.chamados_com_or,
       valor_vinculado_chamados: cruz.valor_vinculado,
-      pct_chamados_faturados: Math.round(pctFaturados * 10) / 10
+      pct_chamados_faturados: Math.round(pctFaturados * 10) / 10,
+      qtd_ta_com_raiz: sumTaRaizQtd(taRaizPorMesEstadoRows),
+      valor_real: kpisRow.valor_total - sumValorDup(taRaizValorDupPorMesEstadoRows)
     },
+    baixa_defeito_ranking: aggregateBaixaDefeito(baixaDefeitoPorMesEstadoRows),
+    ta_raiz_por_mes_estado: taRaizPorMesEstadoRows,
+    ta_raiz_valor_dup_por_mes_estado: taRaizValorDupPorMesEstadoRows,
+    baixa_defeito_por_mes_estado: baixaDefeitoPorMesEstadoRows,
     valor_por_mes_full: {
       labels: (valorMesRes.data || []).map(r => r.mes),
       valores: (valorMesRes.data || []).map(r => r.valor)
@@ -531,6 +665,21 @@ async function loadData(){
     or_abertas_por_mes: orAbertasPorMes,
     or_abertas_por_mes_estado: orAbertasPorMesEstado
   };
+}
+
+function aggregateBaixaDefeito(rows) {
+  const totals = new Map();
+
+  rows.forEach(r => {
+    const causa = String(r.causa || '').trim();
+    const causaKey = normalizeCausa(causa);
+
+    if (!isAllowedBaixaDefeitoCausa(causaKey)) return;
+
+    totals.set(causa, (totals.get(causa) || 0) + Number(r.qtd || 0));
+  });
+
+  return Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
 }
 
 function whenMonthInRange(month, start, end) {
@@ -667,6 +816,21 @@ function buildFilteredData(baseData, filters = {}) {
     ? Object.values(filteredMttrPorMes).reduce((sum, value) => sum + Number(value || 0), 0) / Object.values(filteredMttrPorMes).length
     : 0;
 
+  const rowInFilter = (row) => {
+    if (!whenMonthInRange(row.mes, start, end)) return false;
+    if (selectedState !== 'todos' && String(row.estado || '').toUpperCase() !== selectedState) return false;
+    return true;
+  };
+
+  const filteredTaRaizRows = (baseData.ta_raiz_por_mes_estado || []).filter(rowInFilter);
+  const filteredTaRaizValorDupRows = (baseData.ta_raiz_valor_dup_por_mes_estado || []).filter(rowInFilter);
+  const filteredBaixaDefeitoRows = (baseData.baixa_defeito_por_mes_estado || []).filter(rowInFilter);
+
+  const filteredQtdTaComRaiz = filteredTaRaizRows.reduce((s, r) => s + Number(r.qtd_ta_com_raiz || 0), 0);
+  const filteredValorDuplicado = filteredTaRaizValorDupRows.reduce((s, r) => s + Number(r.valor_duplicado || 0), 0);
+  const filteredValorReal = filteredValorTotal - filteredValorDuplicado;
+  const filteredBaixaDefeitoRanking = aggregateBaixaDefeito(filteredBaixaDefeitoRows);
+
   return {
     ...baseData,
     kpis: {
@@ -678,8 +842,11 @@ function buildFilteredData(baseData, filters = {}) {
       chamados_sem_or: filteredTotalChamados - filteredChamadosComOr,
       valor_vinculado_chamados: filteredValorVinculado,
       pct_chamados_faturados: filteredPctFaturados,
-      mttr_medio_h: filteredMttr
+      mttr_medio_h: filteredMttr,
+      qtd_ta_com_raiz: filteredQtdTaComRaiz,
+      valor_real: filteredValorReal
     },
+    baixa_defeito_ranking: filteredBaixaDefeitoRanking,
     valor_por_mes_full: filteredValorMesFull,
     valor_vs_chamados_2026: filteredValorVsChamados,
     or_abertas_vs_chamados: filteredOrAbertasVsChamados,
@@ -703,7 +870,7 @@ const fmtBRL = (v, compact=true) => {
 };
 const fmtNum = (v) => v.toLocaleString('pt-BR');
 
-['chartValorMes', 'chartChamadosMes', 'chartStatus', 'chartFalhas', 'chartMttr', 'chartCruzado', 'chartOrVsChamados']
+['chartValorMes', 'chartChamadosMes', 'chartStatus', 'chartFalhas', 'chartMttr', 'chartCruzado', 'chartOrVsChamados', 'chartBaixaDefeito']
   .forEach(chartId => {
     const existingChart = Chart.getChart(chartId);
     if (existingChart) existingChart.destroy();
@@ -718,6 +885,9 @@ document.getElementById('kpi-pct-or').textContent = DATA.kpis.pct_chamados_fatur
 document.getElementById('kpi-pct-or-note').textContent = `${fmtNum(DATA.kpis.chamados_com_or)} de ${fmtNum(DATA.kpis.total_chamados)} chamados`;
 document.getElementById('kpi-com-or-count').textContent = fmtNum(DATA.kpis.chamados_com_or);
 document.getElementById('kpi-com-or-note').textContent = 'TAs com número de OR / medição criado';
+document.getElementById('kpi-ta-raiz-count').textContent = fmtNum(DATA.kpis.qtd_ta_com_raiz);
+document.getElementById('kpi-valor-real').textContent = fmtBRL(DATA.kpis.valor_real);
+document.getElementById('kpi-valor-real-note').textContent = `${fmtBRL(DATA.kpis.valor_total - DATA.kpis.valor_real)} em pagamentos duplicados removidos`;
 
 // ---- cross callout ----
 document.getElementById('cross-com-or').textContent = fmtNum(DATA.kpis.chamados_com_or);
@@ -831,6 +1001,21 @@ new Chart(document.getElementById('chartMttr'), {
     responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=> ctx.raw + 'h' } } },
     scales:{ x:{ grid:{display:false} }, y:{ grid:{color:gridColor}, ticks:{ callback:(v)=>v+'h' } } }
+  }
+});
+
+// 5b. Ranking de causas — Baixa Defeito (horizontal bar)
+const baixaDefeitoData = DATA.baixa_defeito_ranking || [];
+new Chart(document.getElementById('chartBaixaDefeito'), {
+  type: 'bar',
+  data: {
+    labels: baixaDefeitoData.map(f=>f[0]),
+    datasets: [{ data: baixaDefeitoData.map(f=>f[1]), backgroundColor: CORAL, borderRadius:2, barThickness:14 }]
+  },
+  options: {
+    indexAxis: 'y', responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{ x:{ grid:{color:gridColor} }, y:{ grid:{display:false}, ticks:{ font:{size:10.5} } } }
   }
 });
 
