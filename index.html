@@ -577,36 +577,38 @@ async function loadData(){
                     taRaizMesEstadoRes, taRaizValorDupMesEstadoRes, baixaDefeitoMesEstadoRes]) {
     if (r.error) throw r.error;
   }
-  const taRaizPorMesEstadoRows = (() => {
-    const rawTaRaizByMonthState = {};
+  const taRaizPorMesEstadoRows = (taRaizMesEstadoRes.data || []).length
+    ? (taRaizMesEstadoRes.data || [])
+    : (() => {
+        const rawTaRaizByMonthState = {};
 
-    sigitmRows.forEach(row => {
-      const rawDate = String(row.data_criacao || '').trim();
-      const match = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
-      if (!match) return;
+        sigitmRows.forEach(row => {
+          const rawDate = String(row.data_criacao || '').trim();
+          const match = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
+          if (!match) return;
 
-      const hasTaRaiz = hasTaRaizValue(row.possui_ta_raiz || row.raiz);
-      if (!hasTaRaiz) return;
+          const hasTaRaiz = hasTaRaizValue(row.possui_ta_raiz || row.raiz);
+          if (!hasTaRaiz) return;
 
-      if (!isAllowedBaixaDefeitoCausa(row.baixa_defeito)) return;
+          if (!isAllowedBaixaDefeitoCausa(row.baixa_defeito)) return;
 
-      const year = 2000 + Number(match[3]);
-      const month = `${year}-${match[2]}`;
-      const estado = String(row.sigla_estado || '-').trim() || '-';
+          const year = 2000 + Number(match[3]);
+          const month = `${year}-${match[2]}`;
+          const estado = String(row.sigla_estado || '-').trim() || '-';
 
-      if (!rawTaRaizByMonthState[month]) rawTaRaizByMonthState[month] = {};
-      rawTaRaizByMonthState[month][estado] = (rawTaRaizByMonthState[month][estado] || 0) + 1;
-    });
+          if (!rawTaRaizByMonthState[month]) rawTaRaizByMonthState[month] = {};
+          rawTaRaizByMonthState[month][estado] = (rawTaRaizByMonthState[month][estado] || 0) + 1;
+        });
 
-    const aggregated = [];
-    Object.entries(rawTaRaizByMonthState).forEach(([month, estados]) => {
-      Object.entries(estados).forEach(([estado, qtd]) => {
-        aggregated.push({ mes: month, estado, qtd_ta_com_raiz: qtd });
-      });
-    });
+        const aggregated = [];
+        Object.entries(rawTaRaizByMonthState).forEach(([month, estados]) => {
+          Object.entries(estados).forEach(([estado, qtd]) => {
+            aggregated.push({ mes: month, estado, qtd_ta_com_raiz: qtd });
+          });
+        });
 
-    return aggregated.length ? aggregated : (taRaizMesEstadoRes.data || []);
-  })();
+        return aggregated;
+      })();
 
   const taRaizValorDupPorMesEstadoRows = taRaizValorDupMesEstadoRes.data || [];
   const baixaDefeitoPorMesEstadoRows = baixaDefeitoMesEstadoRes.data || [];
